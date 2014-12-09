@@ -1,0 +1,147 @@
+from TwitterSearch import *
+from geopy import geocoders
+
+def geo(location):
+    g = geocoders.GoogleV3()
+    loc = g.geocode(location)
+    return loc.latitude, loc.longitude
+
+try:
+    tso = TwitterSearchOrder() # create a TwitterSearchOrder object
+
+    tso.set_keywords(['geocache']) # let's define all words we would like to have a look for
+
+    tso.set_include_entities(False) # and don't give us all those entity information
+
+    ts = TwitterSearch(
+        consumer_key = '1cUDuj2SnONb9BqXn5YFn4zTA',
+        consumer_secret = 'gkBwzkdjEwO2eh5VOBVFBUbFJlm7DbQa60nBjbxy5g5zYtxW6B',
+        access_token = '2865033280-YameL1Flg3TAPcdxYcfW98G0LduZu15RiWZHAHJ',
+        access_token_secret = 'sH8xmDRTRsO9CYqkGLs735AQQPzqi1dmjEpvHPCpCBoZI'
+     )
+
+    for tweet in ts.search_tweets_iterable(tso):
+
+        print( '@%s tweeted: %s' % ( tweet['user']['screen_name'], tweet['text'] ) )
+
+        if tweet['place'] is not None:
+
+            (lat, lng) = geo(tweet['place']['full_name'])
+
+            print 'And they said it from (' + str(lat) +', ' +str(lng)+')'
+
+        else:
+
+            print "And their place wasn't specified..."
+
+except TwitterSearchException as e:    # take care of all those ugly errors if there are some
+    
+    print(e)    #prints e for exception
+
+####################################################################
+
+
+import json    #Make Python understand the stuff in a page on the Internet is JSON 
+import csv    # Make Python understand csvs
+ 
+from time import sleep    # Make Python know how to take a break so we don't hammer API and exceed rate limit
+ 
+outfile_path='F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/twitfile.csv'    # tell computer where to put CSV
+ 
+writer = csv.writer(open(outfile_path, 'w'))    # open it up, the w means we will write to it
+
+headers = ['user', 'tweet_text']    #create a list with headings for our columns
+ 
+writer.writerow(headers)    #write the row of headings to our CSV file
+
+i=1    #set a counter telling us how many times we've gone through the loop, this is the first time, so we'll set it at 1
+ 
+while i<800:    #loop through pages of JSON returned
+
+    print i    #print out what number loop we are on, which will make it easier to track down problems when they appear
+    
+    for tweet in ts.search_tweets_iterable(tso):    #run through each item in results, and jump to an item in that dictionary, ex: the text of the tweet
+     
+     row = []    #initialize the row
+     
+     row.append(str(tweet['user'].encode('utf-8')))    #add every 'cell' to the row list, identifying the item just like an index in a list
+     row.append(str(tweet['screen_name'].encode('utf-8')))
+     row.append(str(tweet['text'].encode('utf-8')))
+     row.append(str(tweet['place'].encode('utf-8')))
+    
+     writer.writerow(row)     #once you have all the cells in there, write the row to your csv
+   
+    i = i +1     #increment our loop counter, now we're on the next time through the loop
+    
+    sleep(5)    #tell Python to rest for 5 secs, so we don't exceed our rate limit
+
+#####################################################################
+
+#Excel to dbase conversion#
+
+import arcpy
+
+from arcpy import env
+
+env.workspace = "F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/"
+
+arcpy.overwriteoutput = True
+
+arcpy.CreateFileGDB_management("F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/", "Lab_7.gdb")
+
+def importallsheets(in_excel, out_gdb):
+    workbook = xlrd.open_workbook(in_excel)
+    sheets = [sheet.name for sheet in workbook.sheets()]
+
+    print('{} sheets found: {}'.format(len(sheets), ','.join(sheets)))
+    for sheet in sheets:
+       
+        out_table = os.path.join(     # The out_table is based on the input excel file name
+            
+            out_gdb,     # a underscore (_) separator followed by the sheet name
+            
+            arcpy.ValidateTableName(
+                "{0}_{1}".format(os.path.basename(in_excel), sheet),
+                out_gdb))
+
+        print('Converting {} to {}'.format(sheet, out_table))
+
+        
+        arcpy.ExcelToTable_conversion(in_excel, out_table, sheet)    # Perform the conversion
+
+if __name__ == '__main__':
+    importallsheets('F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/twitfile.xls',
+                    'F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/Lab_7.gdb')
+
+#########################################################################
+
+#Makes an X,Y Event Layer#
+
+try:    # Set the local variables
+    
+    in_Table = "twitfile.xls"
+    x_coords = "POINT_X"
+    y_coords = "POINT_Y"
+    out_Layer = "twitfile_layer"
+    saved_Layer = r"F:/GradSchool/MSGT_GIS_501/Labs/Lab_7/twit.shp"
+ 
+    spRef = r"Coordinate Systems\Projected Coordinate Systems\World\WGS 1984 World Mercator"    # Set the spatial reference
+   
+    arcpy.MakeXYEventLayer_management(in_Table, x_coords, y_coords, out_Layer, spRef, z_coords)     # Make the XY event layer...
+ 
+    print arcpy.GetCount_management(out_Layer)     # Print the total rows
+   
+    arcpy.SaveToLayerFile_management(out_Layer, saved_Layer)     # Save to a layer file
+ 
+except:    # If an error occurred print the message to the screen
+    
+    print arcpy.GetMessages()
+
+#######################################################################
+
+
+
+#http://www.coderholic.com/parsing-csv-data-in-python/
+#http://www.wellfireinteractive.com/blog/generic-csv-data-exports-in-python/
+#http://codereview.stackexchange.com/questions/44349/printing-out-json-data-from-twitter-as-a-csv
+#http://michelleminkoff.com/2011/02/01/making-the-structured-usable-transform-json-into-a-csv/
